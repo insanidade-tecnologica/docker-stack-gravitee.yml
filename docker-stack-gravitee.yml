@@ -1,0 +1,154 @@
+version: '3'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.5.4
+    hostname: elasticsearch
+    environment:
+      - max_local_storage_nodes=2
+      - cluster.name=elasticsearch
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data1:/usr/share/elasticsearch/data
+      - elasticsearch_log1:/var/log/elasticsearch
+    ports:
+      - 30092:9200
+    networks:
+      - esnet
+      - ucp-hrm
+
+  elasticsearch2:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.5.4
+    hostname: elasticsearch2
+    environment:
+      - cluster.name=elasticsearch
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "discovery.zen.ping.unicast.hosts=elasticsearch"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data2:/usr/share/elasticsearch/data
+      - elasticsearch_log2:/var/log/elasticsearch
+    networks:
+      - esnet
+    depends_on:
+      - elasticsearch
+
+  mongodb:
+    image: mongo:3.4
+    hostname: mongodb
+    ports:
+      - 27017:27017
+    environment:
+      - MONGO_INITDB_DATABASE=gravitee
+    volumes:
+      - mongodb_data1:/data/db
+      - mongodb_log1:/var/log/mongodb
+    networks:
+      - esnet
+      - ucp-hrm
+
+  apim_gateway:
+    hostname: gateway
+    image: graviteeio/gateway:1.21.4
+    ports:
+      - "30082:8082"
+    volumes:
+#      - ./logs/apim-gateway:/opt/graviteeio-gateway/logs
+      - mongodb_gateway1:/opt/graviteeio-gateway/logs
+    environment:
+      - GRAVITEE_MANAGEMENT_MONGODB_URI=mongodb://mongodb:27017/gravitee
+      - GRAVITEE_REPORTERS_ELASTICSEARCH_ENDPOINTS_0=http://container.tesouro.gov.br:30092
+    networks:
+      - ucp-hrm
+    depends_on:
+      - mongodb
+      - elasticsearch
+      - elasticsearch2
+
+  apim_portal:
+    image: graviteeio/management-ui:1.21.4
+    hostname: portal
+    ports:
+        - "30080:80"
+    volumes:
+      - managementui1:/opt/graviteeio-gateway/logs
+    environment:
+      - MGMT_API_URL=http://container.tesouro.gov.br:30083/management/
+    networks:
+      - ucp-hrm
+  apim_management:
+    image: graviteeio/management-api:1.21.4
+    hostname: managementapi
+    ports:
+        - "30083:8083"
+    user: root
+    volumes:
+      - managementapi1:/opt/graviteeio-management-api/logs
+    environment:
+      - GRAVITEE_MANAGEMENT_MONGODB_URI=mongodb://mongodb:27017/gravitee
+      - GRAVITEE_ANALYTICS_ELASTICSEARCH_ENDPOINTS_0=http://container.tesouro.gov.br:30092
+    networks:
+      - ucp-hrm
+    depends_on:
+      - mongodb
+      - elasticsearch
+      - elasticsearch2
+
+volumes:
+  elasticsearch_data1:
+    driver: netapp
+    driver_opts:
+      size: 100G
+
+  elasticsearch_log1:
+    driver: netapp
+    driver_opts:
+      size: 10G
+
+  elasticsearch_data2:
+    driver: netapp
+    driver_opts:
+      size: 100G
+
+  elasticsearch_log2:
+    driver: netapp
+    driver_opts:
+      size: 10G
+  mongodb_data1:
+    driver: netapp
+    driver_opts:
+      size: 100G
+
+  mongodb_log1:
+    driver: netapp
+    driver_opts:
+      size: 10G
+
+  mongodb_gateway1:
+    driver: netapp
+    driver_opts:
+      size: 10G
+
+  managementui1:
+    driver: netapp
+    driver_opts:
+      size: 10G
+
+  managementapi1:
+    driver: netapp
+    driver_opts:
+      size: 10G
+
+networks:
+  esnet:
+    driver: overlay
+  ucp-hrm:
+    external:
+      name: ucp-hrm
